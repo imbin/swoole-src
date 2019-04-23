@@ -21,7 +21,7 @@ swLinkedList* swLinkedList_new(uint8_t type, swDestructor dtor)
     swLinkedList *q = sw_malloc(sizeof(swLinkedList));
     if (q == NULL)
     {
-        swWarn("malloc(%ld) failed.", sizeof(swLinkedList));
+        swWarn("malloc(%ld) failed", sizeof(swLinkedList));
         return NULL;
     }
     bzero(q, sizeof(swLinkedList));
@@ -35,7 +35,7 @@ int swLinkedList_append(swLinkedList *ll, void *data)
     swLinkedList_node *node = sw_malloc(sizeof(swLinkedList_node));
     if (node == NULL)
     {
-        swWarn("malloc(%ld) failed.", sizeof(swLinkedList_node));
+        swWarn("malloc(%ld) failed", sizeof(swLinkedList_node));
         return SW_ERR;
     }
     node->data = data;
@@ -62,7 +62,7 @@ int swLinkedList_prepend(swLinkedList *ll, void *data)
     swLinkedList_node *node = sw_malloc(sizeof(swLinkedList_node));
     if (node == NULL)
     {
-        swWarn("malloc(%ld) failed.", sizeof(swLinkedList_node));
+        swWarn("malloc(%ld) failed", sizeof(swLinkedList_node));
         return SW_ERR;
     }
     node->data = data;
@@ -84,6 +84,9 @@ int swLinkedList_prepend(swLinkedList *ll, void *data)
     return SW_OK;
 }
 
+/**
+ * Pop the element off the end of queue
+ */
 void* swLinkedList_pop(swLinkedList *ll)
 {
     if (ll->tail == NULL)
@@ -111,6 +114,11 @@ void* swLinkedList_pop(swLinkedList *ll)
 
 void swLinkedList_remove_node(swLinkedList *ll, swLinkedList_node *remove_node)
 {
+    if (ll->num == 0 || remove_node == NULL)
+    {
+        return;
+    }
+
     swLinkedList_node *prev = remove_node->prev;
     swLinkedList_node *next = remove_node->next;
 
@@ -147,6 +155,32 @@ void swLinkedList_remove_node(swLinkedList *ll, swLinkedList_node *remove_node)
     sw_free(remove_node);
 }
 
+swLinkedList_node* swLinkedList_find(swLinkedList *ll, void *data)
+{
+    if (ll->num == 0)
+    {
+        return NULL;
+    }
+
+    swLinkedList_node *node = ll->head;
+    swLinkedList_node *tmp;
+
+    while (node)
+    {
+        tmp = node->next;
+        if (node->data == data)
+        {
+            return node;
+        }
+        node = tmp;
+    }
+
+    return NULL;
+}
+
+/**
+ * Shift an element off the beginning of queue
+ */
 void* swLinkedList_shift(swLinkedList *ll)
 {
     if (ll->head == NULL)
@@ -185,7 +219,7 @@ void swLinkedList_free(swLinkedList *ll)
         }
         sw_free(node);
         node = tmp;
-    } 
+    }
 
     sw_free(ll);
 }

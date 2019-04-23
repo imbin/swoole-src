@@ -17,7 +17,12 @@
 #ifndef SW_SOCKS5_H_
 #define SW_SOCKS5_H_
 
-#include "Client.h"
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#include "client.h"
 
 #define SW_SOCKS5_VERSION_CODE    0x05
 
@@ -38,7 +43,6 @@ enum swSocks5_method
 typedef struct _swSocks5
 {
     char *host;
-    int l_host;
     int port;
 
     uint8_t state;
@@ -46,16 +50,16 @@ typedef struct _swSocks5
     uint8_t method;
     uint8_t dns_tunnel;
 
-    char *password;
     char *username;
+    char *password;
+    uint16_t l_username;
+    uint16_t l_password;
+
     char *target_host;
     int target_port;
-    int l_target_host;
-    int l_username;
-    int l_password;
+    uint16_t l_target_host;
 
     char buf[600];
-
 } swSocks5;
 
 static sw_inline void swSocks5_pack(char *buf, int method)
@@ -65,6 +69,11 @@ static sw_inline void swSocks5_pack(char *buf, int method)
     buf[2] = method;
 }
 
+char* swSocks5_strerror(int code);
 int swSocks5_connect(swClient *cli, char *recv_data, int length);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* SW_SOCKS5_H_ */

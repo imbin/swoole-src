@@ -4,8 +4,8 @@ function dump($var)
     return highlight_string("<?php\n\$array = ".var_export($var, true).";", true);
 }
 $key_dir = dirname(dirname(__DIR__)) . '/tests/ssl';
-//$http = new swoole_http_server("0.0.0.0", 9501, SWOOLE_BASE);
-$http = new swoole_http_server("0.0.0.0", 9501);
+$http = new swoole_http_server("0.0.0.0", 9501, SWOOLE_BASE);
+//$http = new swoole_http_server("0.0.0.0", 9501);
 //$http = new swoole_http_server("0.0.0.0", 9501, SWOOLE_BASE, SWOOLE_SOCK_TCP | SWOOLE_SSL);
 //https
 //$http = new swoole_http_server("0.0.0.0", 9501, SWOOLE_BASE, SWOOLE_SOCK_TCP | SWOOLE_SSL);
@@ -30,6 +30,8 @@ $http->set([
 //'daemonize' => true,
 //    'ssl_cert_file' => $key_dir.'/ssl.crt',
 //    'ssl_key_file' => $key_dir.'/ssl.key',
+    'enable_static_handler' => true,
+    'document_root' => '/home/htf/workspace/php/www.swoole.com/web/'
 ]);
 
 $http->listen('127.0.0.1', 9502, SWOOLE_SOCK_TCP);
@@ -96,6 +98,12 @@ function no_chunk(swoole_http_request $request, swoole_http_response $response)
         $response->end();
         return;
     }
+    if ($request->server['request_uri'] == '/save')
+    {
+        file_put_contents(__DIR__.'/httpdata', $request->getData());
+        $response->end('hello');
+        return;
+    }
 //    else
 //    {
         //var_dump($request->post);
@@ -129,6 +137,7 @@ function no_chunk(swoole_http_request $request, swoole_http_response $response)
     {
         $output .= "<h2>POST:</h2>".dump($request->post);
     }
+    var_dump($request->post);
     //$response->header('X-Server', 'Swoole');
     //unset($request, $response);
 //    swoole_timer_after(2000, function() use ( $response) {
@@ -179,7 +188,18 @@ function no_chunk(swoole_http_request $request, swoole_http_response $response)
     }
 }
 
-$http->on('request', 'no_chunk');
+$http->on('request', function ($req, $resp) {
+    $uri = $req->server['request_uri'];
+    if ($uri == '/favicon.ico') {
+    	$resp->status(404);
+        $resp->end();
+    }
+	elseif ($uri == '/chunk') {
+    	chunk($req, $resp);
+    } else {
+    	no_chunk($req, $resp);
+    }
+});
 
 $http->on('finish', function ()
 {
