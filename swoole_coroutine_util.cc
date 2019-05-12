@@ -31,8 +31,11 @@
 #include <string>
 #include <unordered_map>
 
-using namespace swoole;
 using namespace std;
+using swoole::coroutine::System;
+using swoole::coroutine::Socket;
+using swoole::Coroutine;
+using swoole::PHPCoroutine;
 
 typedef struct
 {
@@ -297,6 +300,8 @@ void swoole_coroutine_util_init(int module_number)
 
     //prohibit exit in coroutine
     SW_INIT_CLASS_ENTRY_EX(swoole_exit_exception, "Swoole\\ExitException", NULL, NULL, swoole_exit_exception_methods, swoole_exception);
+    zend_declare_property_long(swoole_exit_exception_ce, ZEND_STRL("flags"), 0, ZEND_ACC_PRIVATE);
+    zend_declare_property_long(swoole_exit_exception_ce, ZEND_STRL("status"), 0, ZEND_ACC_PRIVATE);
 
     SW_REGISTER_LONG_CONSTANT("SWOOLE_EXIT_IN_COROUTINE", SW_EXIT_IN_COROUTINE);
     SW_REGISTER_LONG_CONSTANT("SWOOLE_EXIT_IN_SERVER", SW_EXIT_IN_SERVER);
@@ -310,12 +315,12 @@ void swoole_coroutine_util_init(int module_number)
 
 static PHP_METHOD(swoole_exit_exception, getFlags)
 {
-    RETURN_LONG(Z_LVAL_P(sw_zend_read_property(Z_OBJCE_P(getThis()), getThis(), ZEND_STRL("flags"), 1)));
+    RETURN_LONG(Z_LVAL_P(sw_zend_read_property(swoole_exit_exception_ce, getThis(), ZEND_STRL("flags"), 0)));
 }
 
 static PHP_METHOD(swoole_exit_exception, getStatus)
 {
-    RETURN_ZVAL(sw_zend_read_property(Z_OBJCE_P(getThis()), getThis(), ZEND_STRL("status"), 1), 1, 0);
+    RETURN_ZVAL(sw_zend_read_property(swoole_exit_exception_ce, getThis(), ZEND_STRL("status"), 0), 1, 0);
 }
 
 static PHP_METHOD(swoole_coroutine_util, exists)
@@ -388,11 +393,11 @@ static PHP_METHOD(swoole_coroutine_util, set)
     }
     if (php_swoole_array_get_value(vht, "dns_cache_expire", v))
     {
-        set_dns_cache_expire((time_t) zval_get_long(v));
+        System::set_dns_cache_expire((time_t) zval_get_long(v));
     }
     if (php_swoole_array_get_value(vht, "dns_cache_capacity", v))
     {
-        set_dns_cache_capacity((size_t) zval_get_long(v));
+        System::set_dns_cache_capacity((size_t) zval_get_long(v));
     }
     if (php_swoole_array_get_value(vht, "display_errors", v))
     {
@@ -409,7 +414,7 @@ static PHP_METHOD(swoole_coroutine_util, set)
 
 PHP_FUNCTION(swoole_clear_dns_cache)
 {
-    clear_dns_cache();
+    System::clear_dns_cache();
 }
 
 PHP_FUNCTION(swoole_coroutine_create)
@@ -530,7 +535,7 @@ static PHP_METHOD(swoole_coroutine_util, sleep)
         swoole_php_fatal_error(E_WARNING, "Timer must be greater than 0");
         RETURN_FALSE;
     }
-    Coroutine::sleep(seconds);
+    System::sleep(seconds);
     RETURN_TRUE;
 }
 
@@ -1014,7 +1019,7 @@ static PHP_METHOD(swoole_coroutine_util, readFile)
         Z_PARAM_LONG(flags)
     ZEND_PARSE_PARAMETERS_END_EX(RETURN_FALSE);
 
-    swString *result = Coroutine::read_file(filename, flags & LOCK_EX);
+    swString *result = System::read_file(filename, flags & LOCK_EX);
     if (result == NULL)
     {
         RETURN_FALSE;
@@ -1051,7 +1056,7 @@ static PHP_METHOD(swoole_coroutine_util, writeFile)
         _flags |= O_TRUNC;
     }
 
-    ssize_t retval = Coroutine::write_file(filename, data, l_data, flags & LOCK_EX, _flags);
+    ssize_t retval = System::write_file(filename, data, l_data, flags & LOCK_EX, _flags);
     if (retval < 0)
     {
         RETURN_FALSE
@@ -1145,7 +1150,7 @@ PHP_FUNCTION(swoole_coroutine_gethostbyname)
         RETURN_FALSE;
     }
 
-    string address = Coroutine::gethostbyname(string(domain_name, l_domain_name), family, timeout);
+    string address = System::gethostbyname(string(domain_name, l_domain_name), family, timeout);
     if (address.empty())
     {
         RETURN_FALSE;

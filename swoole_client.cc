@@ -842,7 +842,7 @@ swClient* php_swoole_client_new(zval *zobject, char *host, int host_len, int por
 
     swClient *cli;
     string conn_key;
-    zval *zconnection_id = sw_zend_read_property_not_null(Z_OBJCE_P(zobject), zobject, ZEND_STRL("id"), 1);
+    zval *zconnection_id = sw_zend_read_property_not_null(Z_OBJCE_P(zobject), zobject, ZEND_STRL("id"), 0);
 
     if (zconnection_id && Z_TYPE_P(zconnection_id) == IS_STRING && Z_STRLEN_P(zconnection_id) > 0)
     {
@@ -997,7 +997,7 @@ static PHP_METHOD(swoole_client, set)
         RETURN_FALSE;
     }
 
-    zval *zsetting = sw_zend_read_property_array(swoole_client_ce, getThis(), ZEND_STRL("setting"), 1);
+    zval *zsetting = sw_zend_read_and_convert_property_array(swoole_client_ce, getThis(), ZEND_STRL("setting"), 0);
     php_array_merge(Z_ARRVAL_P(zsetting), Z_ARRVAL_P(zset));
 
     RETURN_TRUE;
@@ -1060,7 +1060,7 @@ static PHP_METHOD(swoole_client, connect)
         RETURN_FALSE;
     }
 
-    zval *zset = sw_zend_read_property(swoole_client_ce, getThis(), ZEND_STRL("setting"), 1);
+    zval *zset = sw_zend_read_property(swoole_client_ce, getThis(), ZEND_STRL("setting"), 0);
     if (zset && ZVAL_IS_ARRAY(zset))
     {
         php_swoole_client_check_setting(cli, zset);
@@ -1075,7 +1075,11 @@ static PHP_METHOD(swoole_client, connect)
             swoole_php_fatal_error(E_ERROR, "no event callback function");
             RETURN_FALSE;
         }
-
+        if (!cb->cache_onReceive.function_handler)
+        {
+            swoole_php_fatal_error(E_ERROR, "no 'onReceive' callback function");
+            RETURN_FALSE;
+        }
         if (swSocket_is_stream(cli->type))
         {
             if (!cb->cache_onConnect.function_handler)
@@ -1109,11 +1113,6 @@ static PHP_METHOD(swoole_client, connect)
         }
         else
         {
-            if (!cb || !cb->cache_onReceive.function_handler)
-            {
-                swoole_php_fatal_error(E_ERROR, "no 'onReceive' callback function");
-                RETURN_FALSE;
-            }
             if (cb->cache_onConnect.function_handler)
             {
                 cli->onConnect = client_onConnect;
@@ -1143,8 +1142,7 @@ static PHP_METHOD(swoole_client, connect)
         {
             if (SwooleG.error == SW_ERROR_DNSLOOKUP_RESOLVE_FAILED)
             {
-                swoole_php_error(E_WARNING, "connect to server[%s:%d] failed. Error: %s[%d]", host, (int )port,
-                        hstrerror(h_errno), h_errno);
+                swoole_php_error(E_WARNING, "connect to server[%s:%d] failed. Error: %s[%d]", host, (int) port, hstrerror(h_errno), h_errno);
             }
             zend_update_property_long(swoole_client_ce, getThis(), ZEND_STRL("errCode"), SwooleG.error);
         }
@@ -1834,8 +1832,8 @@ static PHP_METHOD(swoole_client, enableSSL)
         RETURN_FALSE;
     }
     cli->open_ssl = 1;
-    zval *zset = sw_zend_read_property(swoole_client_ce, getThis(), ZEND_STRL("setting"), 1);
-    if (zset && ZVAL_IS_ARRAY(zset))
+    zval *zset = sw_zend_read_property(swoole_client_ce, getThis(), ZEND_STRL("setting"), 0);
+    if (ZVAL_IS_ARRAY(zset))
     {
         php_swoole_client_check_ssl_setting(cli, zset);
     }

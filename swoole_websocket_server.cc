@@ -156,7 +156,7 @@ int php_swoole_websocket_frame_pack(swString *buffer, zval *zdata, zend_bool opc
         zval *zframe = zdata;
         zval *ztmp = NULL;
         zdata = NULL;
-        if ((ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("opcode"), 1)))
+        if ((ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("opcode"), 0)))
         {
             opcode = zval_get_long(ztmp);
         }
@@ -171,11 +171,11 @@ int php_swoole_websocket_frame_pack(swString *buffer, zval *zdata, zend_bool opc
                 zdata = ztmp;
             }
         }
-        if (!zdata && (ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("data"), 1)))
+        if (!zdata && (ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("data"), 0)))
         {
             zdata = ztmp;
         }
-        if ((ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("finish"), 1)))
+        if ((ztmp = sw_zend_read_property(swoole_websocket_frame_ce, zframe, ZEND_STRL("finish"), 0)))
         {
             fin = zval_is_true(ztmp);
         }
@@ -271,7 +271,7 @@ void swoole_websocket_onRequest(http_context *ctx)
     swoole_http_context_free(ctx);
 }
 
-void php_swoole_sha1(const char *str, int _len, unsigned char *digest)
+void swoole_sha1(const char *str, int _len, unsigned char *digest)
 {
     PHP_SHA1_CTX context;
     PHP_SHA1Init(&context);
@@ -303,7 +303,7 @@ static int websocket_handshake(swServer *serv, swListenPort *port, http_context 
     memcpy(_buf, str_pData.val(), str_pData.len());
     memcpy(_buf + str_pData.len(), SW_WEBSOCKET_GUID, sizeof(SW_WEBSOCKET_GUID) - 1);
     // sha1 sec_websocket_accept
-    php_swoole_sha1(_buf, str_pData.len() + sizeof(SW_WEBSOCKET_GUID) - 1, (unsigned char *) sha1_str);
+    swoole_sha1(_buf, str_pData.len() + sizeof(SW_WEBSOCKET_GUID) - 1, (unsigned char *) sha1_str);
     // base64
     n = swBase64_encode((unsigned char *) sha1_str, sizeof(sha1_str), encoded_str);
     n = sw_snprintf(_buf, sizeof(_buf), "Sec-WebSocket-Accept: %.*s\r\n", n, encoded_str);

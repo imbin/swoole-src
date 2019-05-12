@@ -72,6 +72,9 @@ int swProcessPool_create(swProcessPool *pool, int worker_num, int max_request, k
     pool->worker_num = worker_num;
     pool->max_request = max_request;
 
+    /**
+     * Shared memory is used here
+     */
     pool->workers = SwooleG.memory_pool->alloc(SwooleG.memory_pool, worker_num * sizeof(swWorker));
     if (pool->workers == NULL)
     {
@@ -79,7 +82,6 @@ int swProcessPool_create(swProcessPool *pool, int worker_num, int max_request, k
         return SW_ERR;
     }
 
-#ifndef _WIN32
     if (ipc_mode == SW_IPC_MSGQUEUE)
     {
         pool->use_msgqueue = 1;
@@ -119,10 +121,8 @@ int swProcessPool_create(swProcessPool *pool, int worker_num, int max_request, k
             pool->workers[i].pipe_object = pipe;
         }
     }
-	else
-#endif
-	if (ipc_mode == SW_IPC_SOCKET)
-	{
+    else if (ipc_mode == SW_IPC_SOCKET)
+    {
 		pool->use_socket = 1;
 		pool->stream = sw_malloc(sizeof(swStreamInfo));
 		if (pool->stream == NULL)

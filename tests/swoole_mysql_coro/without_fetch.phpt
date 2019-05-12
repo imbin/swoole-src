@@ -1,7 +1,10 @@
 --TEST--
 swoole_mysql_coro: just execute (test memory leak)
 --SKIPIF--
-<?php require __DIR__ . '/../include/skipif.inc'; ?>
+<?php
+require __DIR__ . '/../include/skipif.inc';
+skip_unsupported();
+?>
 --FILE--
 <?php
 require __DIR__ . '/../include/bootstrap.php';
@@ -21,7 +24,7 @@ go(function () {
     Assert::true($stmt->execute());
     Assert::true($stmt->execute());
     Assert::true($stmt->execute());
-    assert(is_array($stmt->fetchAll()));
+    Assert::assert(is_array($stmt->fetchAll()));
 });
 ?>
 --EXPECT--

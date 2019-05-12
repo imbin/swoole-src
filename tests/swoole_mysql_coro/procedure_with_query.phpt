@@ -42,7 +42,10 @@ SQL;
     if ($db->query($clear) && $db->query($procedure)) {
         for ($n = MAX_REQUESTS_LOW; $n--;) {
             $res = $db->query('CALL reply("hello mysql!")');
-            Assert::eq(current($res[0]), $map[0]);
+            $_map = $map;
+            do {
+                Assert::eq(current($res[0]), array_shift($_map));
+            } while ($res = $db->nextResult());
         }
         for ($n = MAX_REQUESTS_LOW; $n--;) {
             $res = $db->query('CALL reply("hello mysql!")');
@@ -51,7 +54,7 @@ SQL;
                 Assert::eq(current($res[0]), array_shift($_map));
             } while ($res = $db->nextResult());
             Assert::eq($db->affected_rows, 1, 'get the affected rows failed!');
-            assert(empty($_map), 'there are some results lost!');
+            Assert::assert(empty($_map), 'there are some results lost!');
         }
     }
 

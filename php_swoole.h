@@ -111,11 +111,6 @@ typedef struct
 
 extern swoole_object_array swoole_objects;
 
-// Solaris doesn't have PTRACE_ATTACH
-#if defined(HAVE_PTRACE) && defined(__sun)
-#undef HAVE_PTRACE
-#endif
-
 #define SW_CHECK_RETURN(s)      if(s<0){RETURN_FALSE;}else{RETURN_TRUE;}
 #define SW_LOCK_CHECK_RETURN(s) if(s==0){RETURN_TRUE;}else{zend_update_property_long(NULL,getThis(),SW_STRL("errCode"),s);RETURN_FALSE;}
 
@@ -394,7 +389,6 @@ void php_swoole_client_check_ssl_setting(swClient *cli, zval *zset);
 #endif
 void php_swoole_websocket_frame_unpack(swString *data, zval *zframe);
 int php_swoole_websocket_frame_pack(swString *buffer, zval *zdata, zend_bool opcode, zend_bool fin, zend_bool mask);
-void php_swoole_sha1(const char *str, int _len, unsigned char *digest);
 
 int php_swoole_task_pack(swEventData *task, zval *data);
 zval* php_swoole_task_unpack(swEventData *task_result);
@@ -615,8 +609,6 @@ static sw_inline void _sw_zend_bailout(const char *filename, uint32_t lineno)
 
 //----------------------------------Zval API------------------------------------
 
-#define SW_MAKE_STD_ZVAL(p) zval _##p; p = &(_##p); ZVAL_NULL(p)
-
 // do not use sw_copy_to_stack(return_value, foo);
 #define sw_copy_to_stack(ptr, val) val = *(zval *) ptr, ptr = &val
 
@@ -666,6 +658,14 @@ static sw_inline void sw_zval_free(zval *val)
 #define SW_REGISTER_STRING_CONSTANT(name, value)  REGISTER_STRING_CONSTANT(name, (char *) value, CONST_CS | CONST_PERSISTENT)
 #define SW_REGISTER_STRINGL_CONSTANT(name, value) REGISTER_STRINGL_CONSTANT(name, (char *) value, CONST_CS | CONST_PERSISTENT)
 
+//----------------------------------Number API-----------------------------------
+
+#if PHP_VERSION_ID >= 70011
+#define sw_php_math_round(value, places, mode) _php_math_round(value, places, mode)
+#else
+#define sw_php_math_round(value, places, mode) ((double) (value))
+#endif
+
 //----------------------------------String API-----------------------------------
 
 #define SW_PHP_OB_START(zoutput) \
@@ -676,6 +676,24 @@ static sw_inline void sw_zval_free(zval *val)
         php_output_get_contents(&zoutput); \
         php_output_discard(); \
     } while (0)
+
+static sw_inline zend_string* sw_zend_string_recycle(zend_string *s, size_t alloc_len, size_t real_len)
+{
+    SW_ASSERT(!ZSTR_IS_INTERNED(s));
+    if (UNEXPECTED(alloc_len != real_len))
+    {
+        if (UNEXPECTED(alloc_len - real_len > SwooleG.pagesize))
+        {
+            s = zend_string_realloc(s, real_len, 0);
+        }
+        else
+        {
+            ZSTR_LEN(s) = real_len;
+        }
+    }
+    ZSTR_VAL(s)[real_len] = '\0';
+    return s;
+}
 
 //----------------------------------Array API------------------------------------
 
@@ -690,18 +708,23 @@ static sw_inline void sw_zval_free(zval *val)
     else {k = ZSTR_VAL(_foreach_key), klen=ZSTR_LEN(_foreach_key); ktype = 1;} {
 #define SW_HASHTABLE_FOREACH_END()                 } ZEND_HASH_FOREACH_END();
 
-static sw_inline int add_assoc_ulong_safe(zval *arg, const char *key, zend_ulong value)
+static sw_inline int add_assoc_ulong_safe_ex(zval *arg, const char *key, size_t key_len, zend_ulong value)
 {
     if (likely(value <= ZEND_LONG_MAX))
     {
-        return add_assoc_long(arg, key, value);
+        return add_assoc_long_ex(arg, key, key_len, value);
     }
     else
     {
         char buf[MAX_LENGTH_OF_LONG + 1] = {0};
         sprintf((char *) buf, ZEND_ULONG_FMT, value);
-        return add_assoc_string(arg, key, buf);
+        return add_assoc_string_ex(arg, key, key_len, buf);
     }
+}
+
+static sw_inline int add_assoc_ulong_safe(zval *arg, const char *key, zend_ulong value)
+{
+    return add_assoc_ulong_safe_ex(arg, key, strlen(key), value);
 }
 
 //----------------------------------Class API------------------------------------
@@ -820,36 +843,47 @@ static sw_inline int sw_zend_register_class_alias(const char *name, size_t name_
 #endif
 }
 
-static sw_inline zval* sw_zend_read_property(zend_class_entry *class_ptr, zval *obj, const char *s, int len, int silent)
+static sw_inline zval* sw_zend_read_property(zend_class_entry *ce, zval *obj, const char *s, int len, int silent)
 {
-    zval rv, *property = zend_read_property(class_ptr, obj, s, len, silent, &rv);
+    zval rv, *property = zend_read_property(ce, obj, s, len, silent, &rv);
     if (UNEXPECTED(property == &EG(uninitialized_zval)))
     {
-        zend_update_property_null(class_ptr, obj, s, len);
-        return zend_read_property(class_ptr, obj, s, len, silent, &rv);
+        zend_update_property_null(ce, obj, s, len);
+        return zend_read_property(ce, obj, s, len, silent, &rv);
     }
     return property;
 }
 
-static sw_inline zval* sw_zend_read_property_not_null(zend_class_entry *class_ptr, zval *obj, const char *s, int len, int silent)
+static sw_inline zval* sw_zend_read_property_not_null(zend_class_entry *ce, zval *obj, const char *s, int len, int silent)
 {
-    zval rv, *property = zend_read_property(class_ptr, obj, s, len, silent, &rv);
-    return ZVAL_IS_NULL(property) ? NULL : property;
+    zval rv, *property = zend_read_property(ce, obj, s, len, silent, &rv);
+    zend_uchar type = Z_TYPE_P(property);
+    return (type == IS_NULL || UNEXPECTED(type == IS_UNDEF)) ? NULL : property;
 }
 
-static sw_inline zval* sw_zend_read_property_array(zend_class_entry *class_ptr, zval *obj, const char *s, int len, int silent)
+static sw_inline zval *sw_zend_update_and_read_property_array(zend_class_entry *ce, zval *obj, const char *s, int len)
 {
-    zval rv, *property = zend_read_property(class_ptr, obj, s, len, silent, &rv);
+    zval ztmp;
+    array_init(&ztmp);
+    zend_update_property(ce, obj, s, len, &ztmp);
+    zval_ptr_dtor(&ztmp);
+    return zend_read_property(ce, obj, s, len, 1, &ztmp);
+}
+
+static sw_inline zval* sw_zend_read_and_convert_property_array(zend_class_entry *ce, zval *obj, const char *s, int len, int silent)
+{
+    zval rv, *property = zend_read_property(ce, obj, s, len, silent, &rv);
     if (Z_TYPE_P(property) != IS_ARRAY)
     {
-        zval temp_array;
-        array_init(&temp_array);
-        zend_update_property(class_ptr, obj, s, len, &temp_array);
-        zval_ptr_dtor(&temp_array);
         // NOTICE: if user unset the property, zend_read_property will return uninitialized_zval instead of NULL pointer
         if (UNEXPECTED(property == &EG(uninitialized_zval)))
         {
-            property = zend_read_property(class_ptr, obj, s, len, silent, &rv);
+            property = sw_zend_update_and_read_property_array(ce, obj, s, len);
+        }
+        else
+        {
+            zval_ptr_dtor(property);
+            array_init(property);
         }
     }
 
